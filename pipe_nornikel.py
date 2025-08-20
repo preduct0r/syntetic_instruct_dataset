@@ -7,6 +7,7 @@ from typing import Optional, Union
 from enum import Enum
 
 import hashlib
+from tqdm import tqdm
 from dotenv import load_dotenv
 
 # Загружаем переменные окружения
@@ -103,6 +104,37 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
+def get_question_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
+    """Извлекает пары вопрос-ответ из файла"""
+    try:
+        num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
+        
+        # Получаем structured output для пары вопрос-ответ
+        result = get_responce(
+            "prompts/qa_choose_snippet.txt", 
+            text=file_text[num:num+WINDOW_SIZE],
+            use_structured_output=True,
+            response_model=QuestionPair
+        )
+        
+        if result and isinstance(result, QuestionPair):
+            # Проверяем качество пары с помощью structured output
+            check_result = get_responce(
+                "prompts/qa_check.txt", 
+                text=file_text[num:num+WINDOW_SIZE], 
+                question=result.question, 
+                answer=result.answer,
+                use_structured_output=True,
+                response_model=CheckResult
+            )
+            
+            if check_result and isinstance(check_result, CheckResult) and check_result.decision == Decision.YES:
+                return result.question, result.answer
+        
+        return None, None
+    except Exception as e:
+        print(f"Ошибка при обработке текста: {e}")
+        return None, None
 
 
 if __name__ == "__main__":
@@ -126,7 +158,7 @@ if __name__ == "__main__":
         )
         
         if 'Contents' in response:
-            for obj in response['Contents']:
+            for obj in tqdm(response['Contents']):
                 file_key = obj['Key']
                 
                 # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
@@ -148,6 +180,12 @@ if __name__ == "__main__":
                             if instruction is not None and answer is not None:
                                 with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
                                     file.write(instruction + "\n" + answer + "\n=======\n")
+                            
+                            # Генерируем пары вопрос-ответ
+                            question, qa_answer = get_question_pair(data)
+                            if question is not None and qa_answer is not None:
+                                with open(f"qa_pairs.txt", "a", encoding='utf-8') as file:
+                                    file.write(question + "\n" + qa_answer + "\n=======\n")
                                 
                         # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
                             
