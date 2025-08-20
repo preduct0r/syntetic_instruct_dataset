@@ -175,18 +175,16 @@ if __name__ == "__main__":
                         
                         try:
                         # Выполняем функцию get_instruct_pairs для файла
-
-                            for i in range(10):
-                                instruction, answer = get_instruct_pair(data)
-                                if instruction is not None and answer is not None:
-                                    with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                        file.write(instruction + "\n" + answer + "\n=======\n")
-                                
-                                # Генерируем пары вопрос-ответ
-                                question, qa_answer = get_question_pair(data)
-                                if question is not None and qa_answer is not None:
-                                    with open(f"qa_pairs.txt", "a", encoding='utf-8') as file:
-                                        file.write(question + "\n" + qa_answer + "\n=======\n")
+                            instruction, answer = get_instruct_pair(data)
+                            if instruction is not None and answer is not None:
+                                with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
+                                    file.write(instruction + "\n" + answer + "\n=======\n")
+                            
+                            # Генерируем пары вопрос-ответ
+                            question, qa_answer = get_question_pair(data)
+                            if question is not None and qa_answer is not None:
+                                with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
+                                    file2.write(question + "\n" + qa_answer + "\n=======\n")
                                     
                             # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
                                 
