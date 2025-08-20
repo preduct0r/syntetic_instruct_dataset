@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Загружаем переменные окружения
 load_dotenv()
-WINDOW_SIZE = 2000
+WINDOW_SIZE = 50000
 
 
 client = OpenAI(base_url="http://localhost:8555/v1", api_key="EMPTY")
@@ -68,7 +68,7 @@ def get_responce(prompt_template_path: str, text=None, question=None, answer=Non
 def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
     """Извлекает пары инструкций из файла"""
     try:
-        num = random.randint(0, max(1, len(file_text)-WINDOW_SIZE))
+        num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
         
         # Получаем structured output для пары задание-ответ
         result = get_responce(
@@ -135,25 +135,24 @@ if __name__ == "__main__":
                     with open(local_file_path, "r", encoding='utf-8') as file:
                         data = file.read()
                     
-                    if len(data) > WINDOW_SIZE:
-                        try:
-                        # Выполняем функцию get_instruct_pairs для файла
+                    try:
+                    # Выполняем функцию get_instruct_pairs для файла
 
-                            for i in range(10):
-                                instruction, answer = get_instruct_pair(data)
-                                if instruction is not None and answer is not None:
-                                    with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                        file.write(instruction + "\n" + answer + "\n\n")
-                                    
-                            # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                        for i in range(10):
+                            instruction, answer = get_instruct_pair(data)
+                            if instruction is not None and answer is not None:
+                                with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
+                                    file.write(instruction + "\n" + answer + "\n\n")
                                 
-                        except Exception as e:
-                            print(f"Ошибка при обработке файла {file_key}: {e}")
-                        
-                        finally:
-                            # Удаляем временный файл
-                            if os.path.exists(local_file_path):
-                                os.remove(local_file_path)
+                        # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                            
+                    except Exception as e:
+                        print(f"Ошибка при обработке файла {file_key}: {e}")
+                    
+                    finally:
+                        # Удаляем временный файл
+                        if os.path.exists(local_file_path):
+                            os.remove(local_file_path)
         else:
             print("В папке articles не найдено файлов")
             
