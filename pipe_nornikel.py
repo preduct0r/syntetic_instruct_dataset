@@ -4,6 +4,7 @@ import os
 import random
 from pydantic import BaseModel
 from typing import Optional, Union
+from enum import Enum
 
 import hashlib
 from dotenv import load_dotenv
@@ -20,9 +21,14 @@ class InstructPair(BaseModel):
     task: str
     answer: str
 
+class Decision(str, Enum):
+    """Enum для решения проверки"""
+    YES = "да"
+    NO = "нет"
+
 class CheckResult(BaseModel):
     """Модель для результата проверки"""
-    decision: str
+    decision: Decision
 
 def get_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
     with open(prompt_template_path, "r", encoding="utf-8") as f:
@@ -83,7 +89,7 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
                 response_model=CheckResult
             )
             
-            if check_result and isinstance(check_result, CheckResult) and check_result.decision.strip().lower() in ["подходит", "true"]:
+            if check_result and isinstance(check_result, CheckResult) and check_result.decision == Decision.YES:
                 return result.task, result.answer
         
         return None, None
