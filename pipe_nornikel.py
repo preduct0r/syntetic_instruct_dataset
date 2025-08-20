@@ -1,35 +1,97 @@
 from openai import OpenAI
 import boto3
 import os
+import random
+from pydantic import BaseModel
+from typing import Optional, Union
+
 import hashlib
 from dotenv import load_dotenv
 
 # Загружаем переменные окружения
 load_dotenv()
+WINDOW_SIZE = 2000
+
 
 client = OpenAI(base_url="http://localhost:8555/v1", api_key="EMPTY")
 
-response = client.chat.completions.create(
-    model="Qwen/Qwen3-14b",
-    messages=[
-        {"role": "system", "content": "..."},
-        {"role": "user", "content": "..."}
-    ],
-    temperature=0.7,
-    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-)
+class InstructPair(BaseModel):
+    """Модель для пары задание-ответ"""
+    task: str
+    answer: str
 
-print(response.choices[0].message.content)
+class CheckResult(BaseModel):
+    """Модель для результата проверки"""
+    decision: str
+
+def get_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
+    with open(prompt_template_path, "r", encoding="utf-8") as f:
+        template = f.read()
+
+    # Подставляем текст в шаблон
+    prompt = template.format(text=text).format(question=question).format(answer=answer)
+
+    if use_structured_output and response_model:
+        response = client.beta.chat.completions.parse(
+            model="Qwen/Qwen3-14b",
+            messages=[
+                {"role": "system", "content": ""},
+                {"role": "user", "content": prompt}
+            ],
+            response_format=response_model,
+            temperature=0.7,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        
+        return response.choices[0].message.parsed
+    else:
+        response = client.chat.completions.create(
+            model="Qwen/Qwen3-14b",
+            messages=[
+                {"role": "system", "content": ""},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+
+        print(response.choices[0].message.content)
+        return response.choices[0].message.content
 
 
-def get_instruct_pairs(file_path: str) -> list[tuple[str, str]]:
+def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
     """Извлекает пары инструкций из файла"""
-    with open(file_path, "r", encoding='utf-8') as file:
-        data = file.read()
-    
-    # Здесь должна быть логика парсинга файла для извлечения пар инструкций
-    # Пока возвращаем пустой список
-    return []
+    try:
+        num = random.randint(0, max(1, len(file_text)-WINDOW_SIZE))
+        
+        # Получаем structured output для пары задание-ответ
+        result = get_responce(
+            "prompts/instruct_choose_snippet.txt", 
+            text=file_text[num:num+WINDOW_SIZE],
+            use_structured_output=True,
+            response_model=InstructPair
+        )
+        
+        if result and isinstance(result, InstructPair):
+            # Проверяем качество пары с помощью structured output
+            check_result = get_responce(
+                "prompts/instruct_check.txt", 
+                text=file_text[num:num+WINDOW_SIZE], 
+                question=result.task, 
+                answer=result.answer,
+                use_structured_output=True,
+                response_model=CheckResult
+            )
+            
+            if check_result and isinstance(check_result, CheckResult) and check_result.decision.strip().lower() in ["подходит", "true"]:
+                return result.task, result.answer
+        
+        return None, None
+    except Exception as e:
+        print(f"Ошибка при обработке текста: {e}")
+        return None, None
+
+
 
 
 if __name__ == "__main__":
@@ -64,23 +126,28 @@ if __name__ == "__main__":
                     file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
                     local_file_path = f"/tmp/article_{file_hash}.txt"
                     s3_client.download_file(bucket_name, file_key, local_file_path)
+                    with open(local_file_path, "r", encoding='utf-8') as file:
+                        data = file.read()
                     
-                    try:
+                    if len(data) > WINDOW_SIZE:
+                        try:
                         # Выполняем функцию get_instruct_pairs для файла
-                        instruct_pairs = get_instruct_pairs(local_file_path)
-                        print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+
+                            for i in range(10):
+                                instruction, answer = get_instruct_pair(data)
+                                if instruction is not None and answer is not None:
+                                    with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
+                                        file.write(instruction + "\n" + answer + "\n\n")
+                                    
+                            # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                                
+                        except Exception as e:
+                            print(f"Ошибка при обработке файла {file_key}: {e}")
                         
-                        # Здесь можно добавить дополнительную обработку результатов
-                        for i, (instruction, response) in enumerate(instruct_pairs):
-                            print(f"  Пара {i+1}: {instruction[:50]}... -> {response[:50]}...")
-                            
-                    except Exception as e:
-                        print(f"Ошибка при обработке файла {file_key}: {e}")
-                    
-                    finally:
-                        # Удаляем временный файл
-                        if os.path.exists(local_file_path):
-                            os.remove(local_file_path)
+                        finally:
+                            # Удаляем временный файл
+                            if os.path.exists(local_file_path):
+                                os.remove(local_file_path)
         else:
             print("В папке articles не найдено файлов")
             
