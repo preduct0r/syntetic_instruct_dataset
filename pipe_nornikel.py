@@ -21,6 +21,11 @@ class InstructPair(BaseModel):
     task: str
     answer: str
 
+class QuestionPair(BaseModel):
+    """Модель для пары задание-ответ"""
+    question: str
+    answer: str
+
 class Decision(str, Enum):
     """Enum для решения проверки"""
     YES = "да"
@@ -35,7 +40,7 @@ def get_responce(prompt_template_path: str, text=None, question=None, answer=Non
         template = f.read()
 
     # Подставляем текст в шаблон
-    prompt = template.format(text=text).format(question=question).format(answer=answer)
+    prompt = template.format(text=text, question=question, answer=answer)
 
     if use_structured_output and response_model:
         response = client.beta.chat.completions.parse(
@@ -142,7 +147,7 @@ if __name__ == "__main__":
                             instruction, answer = get_instruct_pair(data)
                             if instruction is not None and answer is not None:
                                 with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                    file.write(instruction + "\n" + answer + "\n\n")
+                                    file.write(instruction + "\n" + answer + "\n=======\n")
                                 
                         # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
                             
