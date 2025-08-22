@@ -210,70 +210,90 @@ if __name__ == "__main__":
     
     while True:
         try:
-            # Используем пагинацию для получения всех объектов в папке articles
+            # Сначала подсчитываем общее количество файлов
+            print("Подсчитываем общее количество файлов...")
             paginator = s3_client.get_paginator('list_objects_v2')
             page_iterator = paginator.paginate(
                 Bucket=bucket_name,
                 Prefix=articles_prefix
             )
             
+            total_files = 0
             for page in page_iterator:
                 if 'Contents' in page:
-                    for obj in tqdm(page['Contents'], desc="Processing files"):
-                        file_key = obj['Key']
-                        
-                        # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
-                        if not file_key.endswith('/') and file_key.endswith('.txt'):
-                            print(f"Обрабатываем файл: {file_key}")
-                            
-                            # Создаем короткое имя файла используя хеш
-                            file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
-                            local_file_path = f"/tmp/article_{file_hash}.txt"
-                            s3_client.download_file(bucket_name, file_key, local_file_path)
-                            with open(local_file_path, "r", encoding='utf-8') as file:
-                                data = file.read()
-                            
-                            # Проверяем, относится ли текст к горнодобывающему домену
-                            domain_check = get_local_responce(
-                                "prompts/mining_domain_check.txt",
-                                text=data[:5000],
-                                use_structured_output=True,
-                                response_model=CheckResult
-                            )
-                            
-                            # Если текст не относится к горнодобывающему домену, пропускаем его
-                            if not domain_check or not isinstance(domain_check, CheckResult) or domain_check.decision == Decision.NO:
-                                print(f"Файл {file_key} не относится к горнодобывающему домену, пропускаем")
-                                continue
-                            
-                            print(f"Файл {file_key} относится к горнодобывающему домену, продолжаем обработку")
-                            
-                            try:
-                            # Выполняем функцию get_instruct_pairs для файла
-                                instruction_pairs = get_instruct_pair(data)
-                                for instruction, answer in instruction_pairs:
-                                    with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                        file.write(instruction + "\n" + answer + "\n=======\n")
-                                
-                                # # Генерируем пары вопрос-ответ
-                                # question, qa_answer = get_question_pair(data)
-                                # if question is not None and qa_answer is not None:
-                                #     with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
-                                #         file2.write(question + "\n" + qa_answer + "\n=======\n")
-                                        
-                                # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
-                                    
-                            except Exception as e:
-                                print(f"Ошибка при обработке файла {file_key}: {e}")
-                            
-                            finally:
-                                # Удаляем временный файл
-                                if os.path.exists(local_file_path):
-                                    os.remove(local_file_path)
-                else:
-                    print("В текущей странице не найдено файлов")
+                    for obj in page['Contents']:
+                        if not obj['Key'].endswith('/') and obj['Key'].endswith('.txt'):
+                            total_files += 1
             
-            print("Обработка всех файлов завершена")
+            print(f"Найдено {total_files} файлов для обработки")
+            
+            # Теперь обрабатываем файлы с правильным прогресс-баром
+            paginator = s3_client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(
+                Bucket=bucket_name,
+                Prefix=articles_prefix
+            )
+            
+            processed_files = 0
+            with tqdm(total=total_files, desc="Processing files") as pbar:
+                for page in page_iterator:
+                    if 'Contents' in page:
+                        for obj in page['Contents']:
+                            file_key = obj['Key']
+                            
+                            # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
+                            if not file_key.endswith('/') and file_key.endswith('.txt'):
+                                print(f"Обрабатываем файл: {file_key}")
+                                
+                                # Создаем короткое имя файла используя хеш
+                                file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
+                                local_file_path = f"/tmp/article_{file_hash}.txt"
+                                s3_client.download_file(bucket_name, file_key, local_file_path)
+                                with open(local_file_path, "r", encoding='utf-8') as file:
+                                    data = file.read()
+                                
+                                # Проверяем, относится ли текст к горнодобывающему домену
+                                domain_check = get_local_responce(
+                                    "prompts/mining_domain_check.txt",
+                                    text=data[:5000],
+                                    use_structured_output=True,
+                                    response_model=CheckResult
+                                )
+                                
+                                # Если текст не относится к горнодобывающему домену, пропускаем его
+                                if not domain_check or not isinstance(domain_check, CheckResult) or domain_check.decision == Decision.NO:
+                                    print(f"Файл {file_key} не относится к горнодобывающему домену, пропускаем")
+                                    pbar.update(1)
+                                    continue
+                                
+                                print(f"Файл {file_key} относится к горнодобывающему домену, продолжаем обработку")
+                                
+                                try:
+                                # Выполняем функцию get_instruct_pairs для файла
+                                    instruction_pairs = get_instruct_pair(data)
+                                    for instruction, answer in instruction_pairs:
+                                        with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
+                                            file.write(instruction + "\n" + answer + "\n=======\n")
+                                    
+                                    # # Генерируем пары вопрос-ответ
+                                    # question, qa_answer = get_question_pair(data)
+                                    # if question is not None and qa_answer is not None:
+                                    #     with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
+                                    #         file2.write(question + "\n" + qa_answer + "\n=======\n")
+                                            
+                                    # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                                        
+                                except Exception as e:
+                                    print(f"Ошибка при обработке файла {file_key}: {e}")
+                                
+                                finally:
+                                    # Удаляем временный файл
+                                    if os.path.exists(local_file_path):
+                                        os.remove(local_file_path)
+                                    pbar.update(1)
+                                    processed_files += 1
+            
+            print(f"Обработка всех {processed_files} файлов завершена")
             break  # Выходим из while True после обработки всех файлов
                 
         except Exception as e:
