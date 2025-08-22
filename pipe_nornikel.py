@@ -18,11 +18,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 load_dotenv()
 WINDOW_SIZE = 25000
 
-token = os.getenv("YANDEX_API_KEY")
-folder_id = os.getenv("YANDEX_FOLDER_ID")
-
+# Глобальная переменная для подсчета токенов
 all_tokens = 0
 
+token = os.getenv("YANDEX_API_KEY")
+folder_id = os.getenv("YANDEX_FOLDER_ID")
 class InstructPair(BaseModel):
     """Модель для пары задание-ответ"""
     task: str
@@ -90,6 +90,7 @@ def get_local_responce(prompt_template_path: str, text=None, question=None, answ
     
 
 def get_qwen235_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
+    global all_tokens
 
     client = OpenAI(base_url="https://llm.api.cloud.yandex.net/v1", api_key=token)
     with open(prompt_template_path, "r", encoding="utf-8") as f:
@@ -100,7 +101,6 @@ def get_qwen235_responce(prompt_template_path: str, text=None, question=None, an
     
     # Подсчитываем входные токены
     input_tokens = len(tokenizer.encode(prompt))
-    print(f"Входные токены: {input_tokens}")
 
     if use_structured_output and response_model:
         response = client.chat.completions.parse(
