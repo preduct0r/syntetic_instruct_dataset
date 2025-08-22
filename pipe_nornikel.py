@@ -233,6 +233,21 @@ if __name__ == "__main__":
                             with open(local_file_path, "r", encoding='utf-8') as file:
                                 data = file.read()
                             
+                            # Проверяем, относится ли текст к горнодобывающему домену
+                            domain_check = get_local_responce(
+                                "prompts/mining_domain_check.txt",
+                                text=data[:5000],
+                                use_structured_output=True,
+                                response_model=CheckResult
+                            )
+                            
+                            # Если текст не относится к горнодобывающему домену, пропускаем его
+                            if not domain_check or not isinstance(domain_check, CheckResult) or domain_check.decision == Decision.NO:
+                                print(f"Файл {file_key} не относится к горнодобывающему домену, пропускаем")
+                                continue
+                            
+                            print(f"Файл {file_key} относится к горнодобывающему домену, продолжаем обработку")
+                            
                             try:
                             # Выполняем функцию get_instruct_pairs для файла
                                 instruction_pairs = get_instruct_pair(data)

@@ -1,4 +1,5 @@
 .env
 *.txt 
 !prompts/instruct_check_detailed.txt 
+!prompts/mining_domain_check.txt
 *.pyc
