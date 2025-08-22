@@ -9,6 +9,10 @@ from enum import Enum
 import hashlib
 from tqdm import tqdm
 from dotenv import load_dotenv
+from transformers import AutoTokenizer
+
+model_id = "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"  # your exact model id
+tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
 # Загружаем переменные окружения
 load_dotenv()
@@ -17,6 +21,7 @@ WINDOW_SIZE = 25000
 token = os.getenv("YANDEX_API_KEY")
 folder_id = os.getenv("YANDEX_FOLDER_ID")
 
+all_tokens = 0
 
 class InstructPair(BaseModel):
     """Модель для пары задание-ответ"""
@@ -92,6 +97,10 @@ def get_qwen235_responce(prompt_template_path: str, text=None, question=None, an
 
     # Подставляем текст в шаблон
     prompt = template.format(text=text, question=question, answer=answer)
+    
+    # Подсчитываем входные токены
+    input_tokens = len(tokenizer.encode(prompt))
+    print(f"Входные токены: {input_tokens}")
 
     if use_structured_output and response_model:
         response = client.chat.completions.parse(
@@ -107,6 +116,14 @@ def get_qwen235_responce(prompt_template_path: str, text=None, question=None, an
             temperature=0.7,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
+        
+        # Подсчитываем выходные токены
+        response_content = response.choices[0].message.content
+        output_tokens = len(tokenizer.encode(response_content)) if response_content else 0
+        total_tokens = input_tokens + output_tokens
+
+        all_tokens += total_tokens
+        print(f"Сожжено токенов: {all_tokens}")
         
         return response.choices[0].message.parsed
     else:
