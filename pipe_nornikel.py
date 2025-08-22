@@ -210,51 +210,57 @@ if __name__ == "__main__":
     
     while True:
         try:
-            # Получаем список всех объектов в папке articles
-            response = s3_client.list_objects_v2(
+            # Используем пагинацию для получения всех объектов в папке articles
+            paginator = s3_client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(
                 Bucket=bucket_name,
                 Prefix=articles_prefix
             )
             
-            if 'Contents' in response:
-                for obj in tqdm(response['Contents']):
-                    file_key = obj['Key']
-                    
-                    # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
-                    if not file_key.endswith('/') and file_key.endswith('.txt'):
-                        print(f"Обрабатываем файл: {file_key}")
+            for page in page_iterator:
+                if 'Contents' in page:
+                    for obj in tqdm(page['Contents'], desc="Processing files"):
+                        file_key = obj['Key']
                         
-                        # Создаем короткое имя файла используя хеш
-                        file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
-                        local_file_path = f"/tmp/article_{file_hash}.txt"
-                        s3_client.download_file(bucket_name, file_key, local_file_path)
-                        with open(local_file_path, "r", encoding='utf-8') as file:
-                            data = file.read()
-                        
-                        try:
-                        # Выполняем функцию get_instruct_pairs для файла
-                            instruction_pairs = get_instruct_pair(data)
-                            for instruction, answer in instruction_pairs:
-                                with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                    file.write(instruction + "\n" + answer + "\n=======\n")
+                        # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
+                        if not file_key.endswith('/') and file_key.endswith('.txt'):
+                            print(f"Обрабатываем файл: {file_key}")
                             
-                            # # Генерируем пары вопрос-ответ
-                            # question, qa_answer = get_question_pair(data)
-                            # if question is not None and qa_answer is not None:
-                            #     with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
-                            #         file2.write(question + "\n" + qa_answer + "\n=======\n")
-                                    
-                            # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                            # Создаем короткое имя файла используя хеш
+                            file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
+                            local_file_path = f"/tmp/article_{file_hash}.txt"
+                            s3_client.download_file(bucket_name, file_key, local_file_path)
+                            with open(local_file_path, "r", encoding='utf-8') as file:
+                                data = file.read()
+                            
+                            try:
+                            # Выполняем функцию get_instruct_pairs для файла
+                                instruction_pairs = get_instruct_pair(data)
+                                for instruction, answer in instruction_pairs:
+                                    with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
+                                        file.write(instruction + "\n" + answer + "\n=======\n")
                                 
-                        except Exception as e:
-                            print(f"Ошибка при обработке файла {file_key}: {e}")
-                        
-                        finally:
-                            # Удаляем временный файл
-                            if os.path.exists(local_file_path):
-                                os.remove(local_file_path)
-            else:
-                print("В папке articles не найдено файлов")
+                                # # Генерируем пары вопрос-ответ
+                                # question, qa_answer = get_question_pair(data)
+                                # if question is not None and qa_answer is not None:
+                                #     with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
+                                #         file2.write(question + "\n" + qa_answer + "\n=======\n")
+                                        
+                                # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
+                                    
+                            except Exception as e:
+                                print(f"Ошибка при обработке файла {file_key}: {e}")
+                            
+                            finally:
+                                # Удаляем временный файл
+                                if os.path.exists(local_file_path):
+                                    os.remove(local_file_path)
+                else:
+                    print("В текущей странице не найдено файлов")
+            
+            print("Обработка всех файлов завершена")
+            break  # Выходим из while True после обработки всех файлов
                 
         except Exception as e:
             print(f"Ошибка при работе с S3: {e}")
+            break  # Выходим из цикла при ошибке
