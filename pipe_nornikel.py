@@ -14,8 +14,9 @@ from dotenv import load_dotenv
 load_dotenv()
 WINDOW_SIZE = 50000
 
-
-client = OpenAI(base_url="http://localhost:8555/v1", api_key="EMPTY")
+token = os.getenv("YANDEX_API_KEY")
+folder_id = os.getenv("YANDEX_FOLDER_ID")
+client = OpenAI(base_url="https://llm.api.cloud.yandex.net/v1", api_key=token)
 
 class InstructPair(BaseModel):
     """Модель для пары задание-ответ"""
@@ -44,11 +45,14 @@ def get_responce(prompt_template_path: str, text=None, question=None, answer=Non
     prompt = template.format(text=text, question=question, answer=answer)
 
     if use_structured_output and response_model:
-        response = client.beta.chat.completions.parse(
-            model="Qwen/Qwen3-14b",
+        response = client.chat.completions.parse(
+            model=f"gpt://{folder_id}/qwen3-235b-a22b-fp8/latest",
             messages=[
-                {"role": "system", "content": ""},
-                {"role": "user", "content": prompt}
+                {"role": "developer", "content": ""},
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
             ],
             response_format=response_model,
             temperature=0.7,
@@ -58,16 +62,18 @@ def get_responce(prompt_template_path: str, text=None, question=None, answer=Non
         return response.choices[0].message.parsed
     else:
         response = client.chat.completions.create(
-            model="Qwen/Qwen3-14b",
+            model=f"gpt://{folder_id}/qwen3-235b-a22b-fp8/latest",
             messages=[
-                {"role": "system", "content": ""},
-                {"role": "user", "content": prompt}
+                {"role": "developer", "content": ""},
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
             ],
             temperature=0.7,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
 
-        print(response.choices[0].message.content)
         return response.choices[0].message.content
 
 
@@ -104,37 +110,37 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
         return None, None
 
 
-def get_question_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
-    """Извлекает пары вопрос-ответ из файла"""
-    try:
-        num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
+# def get_question_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
+#     """Извлекает пары вопрос-ответ из файла"""
+#     try:
+#         num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
         
-        # Получаем structured output для пары вопрос-ответ
-        result = get_responce(
-            "prompts/qa_choose_snippet.txt", 
-            text=file_text[num:num+WINDOW_SIZE],
-            use_structured_output=True,
-            response_model=QuestionPair
-        )
+#         # Получаем structured output для пары вопрос-ответ
+#         result = get_responce(
+#             "prompts/qa_choose_snippet.txt", 
+#             text=file_text[num:num+WINDOW_SIZE],
+#             use_structured_output=True,
+#             response_model=QuestionPair
+#         )
         
-        if result and isinstance(result, QuestionPair):
-            # Проверяем качество пары с помощью structured output
-            check_result = get_responce(
-                "prompts/qa_check.txt", 
-                text=file_text[num:num+WINDOW_SIZE], 
-                question=result.question, 
-                answer=result.answer,
-                use_structured_output=True,
-                response_model=CheckResult
-            )
+#         if result and isinstance(result, QuestionPair):
+#             # Проверяем качество пары с помощью structured output
+#             check_result = get_responce(
+#                 "prompts/qa_check.txt", 
+#                 text=file_text[num:num+WINDOW_SIZE], 
+#                 question=result.question, 
+#                 answer=result.answer,
+#                 use_structured_output=True,
+#                 response_model=CheckResult
+#             )
             
-            if check_result and isinstance(check_result, CheckResult) and check_result.decision == Decision.YES:
-                return result.question, result.answer
+#             if check_result and isinstance(check_result, CheckResult) and check_result.decision == Decision.YES:
+#                 return result.question, result.answer
         
-        return None, None
-    except Exception as e:
-        print(f"Ошибка при обработке текста: {e}")
-        return None, None
+#         return None, None
+#     except Exception as e:
+#         print(f"Ошибка при обработке текста: {e}")
+#         return None, None
 
 
 if __name__ == "__main__":
@@ -180,11 +186,11 @@ if __name__ == "__main__":
                                 with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
                                     file.write(instruction + "\n" + answer + "\n=======\n")
                             
-                            # Генерируем пары вопрос-ответ
-                            question, qa_answer = get_question_pair(data)
-                            if question is not None and qa_answer is not None:
-                                with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
-                                    file2.write(question + "\n" + qa_answer + "\n=======\n")
+                            # # Генерируем пары вопрос-ответ
+                            # question, qa_answer = get_question_pair(data)
+                            # if question is not None and qa_answer is not None:
+                            #     with open(f"qa_pairs.txt", "a", encoding='utf-8') as file2:
+                            #         file2.write(question + "\n" + qa_answer + "\n=======\n")
                                     
                             # print(f"Найдено {len(instruct_pairs)} пар инструкций в файле {file_key}")
                                 
