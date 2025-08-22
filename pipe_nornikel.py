@@ -37,7 +37,31 @@ class CheckResult(BaseModel):
     """Модель для результата проверки"""
     decision: Decision
 
-def get_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
+def get_local_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
+    with open(prompt_template_path, "r", encoding="utf-8") as f:
+        template = f.read()
+
+    # Подставляем текст в шаблон
+    prompt = template.format(text=text, question=question, answer=answer)
+
+    if use_structured_output and response_model:
+        response = client.beta.chat.completions.parse(
+            model="Qwen/Qwen3-14b",
+            messages=[
+                {"role": "system", "content": ""},
+                {"role": "user", "content": prompt}
+            ],
+            response_format=response_model,
+            temperature=0.7,
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+        
+        return response.choices[0].message.parsed
+    else:
+        raise ValueError("use_structured_output и response_model должны быть True и не None соответственно")
+    
+
+def get_qwen235_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
     with open(prompt_template_path, "r", encoding="utf-8") as f:
         template = f.read()
 
@@ -61,20 +85,7 @@ def get_responce(prompt_template_path: str, text=None, question=None, answer=Non
         
         return response.choices[0].message.parsed
     else:
-        response = client.chat.completions.create(
-            model=f"gpt://{folder_id}/qwen3-235b-a22b-fp8/latest",
-            messages=[
-                {"role": "developer", "content": ""},
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-            temperature=0.7,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
-        )
-
-        return response.choices[0].message.content
+        raise ValueError("use_structured_output и response_model должны быть True и не None соответственно")
 
 
 def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
@@ -83,7 +94,7 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
         num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
         
         # Получаем structured output для пары задание-ответ
-        result = get_responce(
+        result = get_qwen235_responce(
             "prompts/instruct_choose_snippet.txt", 
             text=file_text[num:num+WINDOW_SIZE],
             use_structured_output=True,
@@ -92,7 +103,7 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
         
         if result and isinstance(result, InstructPair):
             # Проверяем качество пары с помощью structured output
-            check_result = get_responce(
+            check_result = get_local_responce(
                 "prompts/instruct_check.txt", 
                 text=file_text[num:num+WINDOW_SIZE], 
                 question=result.task, 
