@@ -12,11 +12,11 @@ from dotenv import load_dotenv
 
 # Загружаем переменные окружения
 load_dotenv()
-WINDOW_SIZE = 50000
+WINDOW_SIZE = 25000
 
 token = os.getenv("YANDEX_API_KEY")
 folder_id = os.getenv("YANDEX_FOLDER_ID")
-client = OpenAI(base_url="https://llm.api.cloud.yandex.net/v1", api_key=token)
+
 
 class InstructPair(BaseModel):
     """Модель для пары задание-ответ"""
@@ -37,10 +37,29 @@ class CheckResult(BaseModel):
     """Модель для результата проверки"""
     decision: Decision
 
+class CriterionCheck(BaseModel):
+    """Модель для проверки одного критерия"""
+    criterion_number: int
+    decision: Decision
+    reasoning: str
+
+class DetailedCheckResult(BaseModel):
+    """Модель для детального результата проверки"""
+    criterion_1: CriterionCheck
+    criterion_2: CriterionCheck
+    criterion_3: CriterionCheck
+    criterion_4: CriterionCheck
+    criterion_5: CriterionCheck
+    criterion_6: CriterionCheck
+    criterion_7: CriterionCheck
+    criterion_8: CriterionCheck
+    overall_decision: Decision
+    overall_reasoning: str
+
 def get_local_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
     with open(prompt_template_path, "r", encoding="utf-8") as f:
         template = f.read()
-
+    client = OpenAI(base_url="http://localhost:8555/v1", api_key="EMPTY")
     # Подставляем текст в шаблон
     prompt = template.format(text=text, question=question, answer=answer)
 
@@ -62,6 +81,8 @@ def get_local_responce(prompt_template_path: str, text=None, question=None, answ
     
 
 def get_qwen235_responce(prompt_template_path: str, text=None, question=None, answer=None, use_structured_output=False, response_model=None) -> Union[str, BaseModel, None]:
+
+    client = OpenAI(base_url="https://llm.api.cloud.yandex.net/v1", api_key=token)
     with open(prompt_template_path, "r", encoding="utf-8") as f:
         template = f.read()
 
@@ -104,15 +125,15 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
         if result and isinstance(result, InstructPair):
             # Проверяем качество пары с помощью structured output
             check_result = get_local_responce(
-                "prompts/instruct_check.txt", 
+                "prompts/instruct_check_detailed.txt", 
                 text=file_text[num:num+WINDOW_SIZE], 
                 question=result.task, 
                 answer=result.answer,
                 use_structured_output=True,
-                response_model=CheckResult
+                response_model=DetailedCheckResult
             )
             
-            if check_result and isinstance(check_result, CheckResult) and check_result.decision == Decision.YES:
+            if check_result and isinstance(check_result, DetailedCheckResult) and check_result.overall_decision == Decision.YES:
                 return result.task, result.answer
         
         return None, None

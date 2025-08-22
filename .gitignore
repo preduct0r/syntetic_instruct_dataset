@@ -1,2 +1,4 @@
 .env
-*.txt
+*.txt 
+!prompts/instruct_check_detailed.txt 
+*.pyc
