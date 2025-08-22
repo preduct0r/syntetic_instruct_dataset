@@ -23,6 +23,10 @@ class InstructPair(BaseModel):
     task: str
     answer: str
 
+class MultipleInstructPairs(BaseModel):
+    """Модель для множественных пар задание-ответ"""
+    pairs: list[InstructPair]
+
 class QuestionPair(BaseModel):
     """Модель для пары задание-ответ"""
     question: str
@@ -109,48 +113,47 @@ def get_qwen235_responce(prompt_template_path: str, text=None, question=None, an
         raise ValueError("use_structured_output и response_model должны быть True и не None соответственно")
 
 
-def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
-    """Извлекает пары инструкций из файла"""
+def get_instruct_pair(file_text: str) -> list[tuple[str, str]]:
+    """Извлекает множественные пары инструкций из файла"""
     try:
-        num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
-        
-        # Получаем structured output для пары задание-ответ
+        # Получаем structured output для множественных пар задание-ответ
         result = get_qwen235_responce(
             "prompts/instruct_choose_snippet.txt", 
-            text=file_text[num:num+WINDOW_SIZE],
+            text=file_text[:WINDOW_SIZE],
             use_structured_output=True,
-            response_model=InstructPair
+            response_model=MultipleInstructPairs
         )
         
-        if result and isinstance(result, InstructPair):
-            # Проверяем качество пары с помощью structured output
-            check_result = get_local_responce(
-                "prompts/instruct_check_detailed.txt", 
-                text=file_text[num:num+WINDOW_SIZE], 
-                question=result.task, 
-                answer=result.answer,
-                use_structured_output=True,
-                response_model=DetailedCheckResult
-            )
-            
-            if check_result and isinstance(check_result, DetailedCheckResult) and check_result.overall_decision == Decision.YES:
-                return result.task, result.answer
+        validated_pairs = []
         
-        return None, None
+        if result and isinstance(result, MultipleInstructPairs):
+            for pair in result.pairs:
+                # Проверяем качество каждой пары с помощью structured output
+                check_result = get_local_responce(
+                    "prompts/instruct_check_detailed.txt", 
+                    text=file_text[:WINDOW_SIZE], 
+                    question=pair.task, 
+                    answer=pair.answer,
+                    use_structured_output=True,
+                    response_model=DetailedCheckResult
+                )
+                
+                if check_result and isinstance(check_result, DetailedCheckResult) and check_result.overall_decision == Decision.YES:
+                    validated_pairs.append((pair.task, pair.answer))
+        
+        return validated_pairs
     except Exception as e:
         print(f"Ошибка при обработке текста: {e}")
-        return None, None
+        return []
 
 
 # def get_question_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
 #     """Извлекает пары вопрос-ответ из файла"""
 #     try:
-#         num = 0 #random.randint(0, max(0, len(file_text)-WINDOW_SIZE))
-        
 #         # Получаем structured output для пары вопрос-ответ
 #         result = get_responce(
 #             "prompts/qa_choose_snippet.txt", 
-#             text=file_text[num:num+WINDOW_SIZE],
+#             text=file_text[:WINDOW_SIZE],
 #             use_structured_output=True,
 #             response_model=QuestionPair
 #         )
@@ -159,7 +162,7 @@ def get_instruct_pair(file_text: str) -> tuple[Optional[str], Optional[str]]:
 #             # Проверяем качество пары с помощью structured output
 #             check_result = get_responce(
 #                 "prompts/qa_check.txt", 
-#                 text=file_text[num:num+WINDOW_SIZE], 
+#                 text=file_text[:WINDOW_SIZE], 
 #                 question=result.question, 
 #                 answer=result.answer,
 #                 use_structured_output=True,
@@ -213,8 +216,8 @@ if __name__ == "__main__":
                         
                         try:
                         # Выполняем функцию get_instruct_pairs для файла
-                            instruction, answer = get_instruct_pair(data)
-                            if instruction is not None and answer is not None:
+                            instruction_pairs = get_instruct_pair(data)
+                            for instruction, answer in instruction_pairs:
                                 with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
                                     file.write(instruction + "\n" + answer + "\n=======\n")
                             
