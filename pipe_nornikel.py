@@ -235,6 +235,9 @@ if __name__ == "__main__":
             )
             
             processed_files = 0
+            files_counter = 0  # Счетчик для всех файлов
+            SKIP_FILES = 160   # Количество файлов для пропуска
+            
             with tqdm(total=total_files, desc="Processing files") as pbar:
                 for page in page_iterator:
                     if 'Contents' in page:
@@ -243,7 +246,15 @@ if __name__ == "__main__":
                             
                             # Проверяем, что это текстовый файл (не папка и имеет расширение .txt)
                             if not file_key.endswith('/') and file_key.endswith('.txt'):
-                                print(f"Обрабатываем файл: {file_key}")
+                                files_counter += 1
+                                
+                                # Пропускаем первые 160 файлов
+                                if files_counter <= SKIP_FILES:
+                                    print(f"Пропускаем файл {files_counter}: {file_key}")
+                                    pbar.update(1)
+                                    continue
+                                
+                                print(f"Обрабатываем файл {files_counter}: {file_key}")
                                 
                                 # Создаем короткое имя файла используя хеш
                                 file_hash = hashlib.md5(file_key.encode()).hexdigest()[:10]
@@ -273,7 +284,7 @@ if __name__ == "__main__":
                                     instruction_pairs = get_instruct_pair(data)
                                     for instruction, answer in instruction_pairs:
                                         with open(f"instruct_pairs.txt", "a", encoding='utf-8') as file:
-                                            file.write(instruction + "\n" + answer + "\n=======\n")
+                                            file.write(instruction + "\n====\n" + answer + "\n=======\n")
                                     
                                     # # Генерируем пары вопрос-ответ
                                     # question, qa_answer = get_question_pair(data)
