@@ -3,3 +3,5 @@
 !prompts/instruct_check_detailed.txt 
 !prompts/mining_domain_check.txt
 *.pyc
+!instruct_pairs.txt
+!instruct_pairs_v1.txt
